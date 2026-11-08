@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#060709">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Krillio">
+<meta name="description" content="A daily word game: seven prompts, 25 seconds each. The rarer your answer, the deeper your swarm descends.">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Krillio</title>
+<style>
+html,body{margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<style>
+/* Layout: one narrow column in the Midnight Sudoku style (near-black, system type, frosted glass, white accent) over a quiet ocean canvas that sinks as you score. Single dark look by design. */
+:root{
+  --bg:#060709; --text:#F5F5F7; --text2:#A1A1AA; --text3:#8B8B95;
+  --glass:rgba(255,255,255,.055); --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.16);
+  --accent:#F5F5F7; --ink:#0A0B1A; --soft:#232325;
+  --red:#FF6B6B; --tier1:#8B8B95; --tier2:#B4B4BB; --tier3:#DADADF; --tier4:#FFFFFF;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+#sea{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.glow{position:fixed;z-index:0;width:440px;height:440px;top:-200px;left:calc(50% - 220px);border-radius:50%;background:var(--accent);filter:blur(100px);opacity:.1;pointer-events:none}
+.app{position:relative;z-index:1;min-height:100%;max-width:480px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-block:10px 24px;display:flex;flex-direction:column}
+.screen{flex:1;display:flex;flex-direction:column;gap:16px}
+.screen.enter{animation:enter .38s cubic-bezier(.2,.8,.2,1)}
+@keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.glass,.panel,.icon-btn,.depth-pill,.runlist li{background:var(--glass);border:1px solid var(--line);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.eyebrow{margin:0;font-size:13px;font-weight:500;color:var(--text2)}
+.fine{margin:0;font-size:13px;line-height:1.5;color:var(--text2)}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;margin:0;cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* bars */
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px}
+.brand{height:44px;display:flex;align-items:center;gap:10px;color:var(--text2);font-size:15px;font-weight:500}
+.chip{height:24px;padding:0 10px;border-radius:12px;background:var(--soft);color:var(--text);font-size:12px;font-weight:600;display:inline-flex;align-items:center;white-space:nowrap}
+.icon-btn{width:44px;height:44px;flex:none;border-radius:22px;display:flex;align-items:center;justify-content:center;color:var(--text);transition:transform .15s}
+.icon-btn:active{transform:scale(.95)}
+.segs{display:flex;gap:4px;flex:1;justify-content:center;max-width:220px}
+.seg{flex:1;max-width:28px;height:4px;border-radius:2px;background:rgba(255,255,255,.12)}
+.seg.on{background:var(--tc)}
+.seg.now{background:var(--accent)}
+.depth-pill{height:44px;padding:0 16px;border-radius:22px;display:flex;align-items:center;font-size:15px;font-weight:600;white-space:nowrap}
+
+/* buttons */
+.btn{width:100%;height:58px;border-radius:20px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:17px;font-weight:600;letter-spacing:-.01em;transition:transform .15s,background-color .3s;flex:none}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);color:var(--ink)}
+.btn.primary:disabled{background:rgba(255,255,255,.1);color:var(--text2);transform:none}
+.btn.ghost{height:54px;background:var(--glass);border:1px solid var(--line);font-size:16px;font-weight:500}
+.btn.quiet{height:46px;color:var(--text2);font-size:15px;font-weight:500}
+.btn.small{height:44px;width:auto;padding:0 18px;border-radius:22px;font-size:14px}
+
+/* home */
+.hero{display:flex;flex-direction:column;gap:8px}
+.wordmark{margin:2px 0 0;font-size:clamp(40px,12vw,52px);line-height:1.05;font-weight:700;letter-spacing:-.045em}
+.lede{margin:0;font-size:16px;line-height:1.5;color:var(--text2);text-wrap:pretty}
+.stage{height:140px;flex:none}
+.stage.small{height:90px;margin-top:auto}
+.stage.mid{height:100px}
+.actions{display:flex;flex-direction:column;gap:10px}
+.panel{border-radius:24px}
+details.panel>summary{list-style:none;cursor:pointer;min-height:56px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:600;letter-spacing:-.02em}
+details.panel>summary::-webkit-details-marker{display:none}
+details.panel>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--text2);border-bottom:2px solid var(--text2);transform:rotate(45deg) translateY(-3px);transition:transform .2s}
+details[open].panel>summary::after{transform:rotate(225deg) translate(-2px,-2px)}
+.how{padding:0 18px 18px;display:flex;flex-direction:column;gap:16px}
+.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.steps li{display:flex;gap:12px;align-items:flex-start;font-size:15px;line-height:1.5;color:var(--text2)}
+.steps .n{flex:none;width:24px;height:24px;border-radius:12px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--text)}
+.legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;padding-top:14px;border-top:1px solid var(--line)}
+.legend div{display:flex;align-items:center;gap:10px;font-size:14px}
+.legend .r{margin-left:auto;font:400 12px var(--mono);color:var(--text2)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--tc)}
+.footer{margin-top:auto;padding-top:8px;text-align:center}
+
+/* tiers */
+.t-none{--tc:var(--red)} .t-unverified{--tc:var(--text2)} .t-common{--tc:var(--tier1)} .t-uncommon{--tc:var(--tier2)} .t-rare{--tc:var(--tier3)} .t-unique{--tc:var(--tier4)} .t-checking{--tc:var(--text2)}
+
+/* play */
+.prompt-head{display:flex;align-items:center;gap:14px;padding-top:4px}
+.timer{position:relative;width:60px;height:60px;flex:none}
+.timer svg{display:block;transform:rotate(-90deg)}
+.timer .track{stroke:rgba(255,255,255,.1)}
+.timer .arc{stroke:var(--accent);transition:stroke .2s}
+.timer .num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.timer.warn .arc{stroke:var(--red)} .timer.warn .num{color:var(--red)}
+.prompt{margin:0;font-size:clamp(28px,8vw,36px);line-height:1.15;font-weight:700;letter-spacing:-.035em;text-wrap:balance}
+.answer{display:flex;flex-direction:column;gap:10px}
+.answer input{height:60px;width:100%;padding:0 20px;border:1px solid var(--line2);border-radius:20px;background:var(--glass);color:var(--text);font:500 19px var(--sans);outline:none;-webkit-appearance:none;appearance:none;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);transition:border-color .2s}
+.answer input:focus{border-color:var(--accent)}
+.answer input::placeholder{color:var(--text3)}
+
+/* reveal */
+.you-said{display:flex;flex-direction:column;gap:6px}
+.you-said h2{margin:0;font-size:clamp(36px,11vw,52px);line-height:1.05;font-weight:700;letter-spacing:-.045em;overflow-wrap:anywhere}
+.verdict{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:34px}
+.badge{height:28px;padding:0 12px;border-radius:14px;background:color-mix(in srgb,var(--tc) 18%,transparent);color:var(--tc);display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600}
+.badge .dot{width:7px;height:7px}
+.t-checking .dot{animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.pts{font-size:28px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+.verdict-line{margin:0;font-size:16px;line-height:1.5;color:var(--text2)}
+.dist{padding:18px;display:flex;flex-direction:column;gap:14px}
+.dist h3{margin:0;font-size:18px;font-weight:600;letter-spacing:-.02em}
+.dist ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.dist li{display:flex;flex-direction:column;gap:7px}
+.dist .row{display:flex;justify-content:space-between;gap:12px;font-size:15px;color:var(--text2)}
+.dist .row .p{font:400 13px var(--mono)}
+.dist .bar-bg{height:4px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+.dist .bar-fg{height:100%;border-radius:2px;background:rgba(255,255,255,.28)}
+.dist li.me .row{color:var(--text);font-weight:600}
+.dist li.me .bar-fg{background:var(--tc)}
+
+/* results */
+.stage.tall{height:150px}
+.score{display:flex;flex-direction:column;gap:6px}
+.big{display:flex;align-items:baseline;gap:8px}
+.big b{font-size:clamp(52px,16vw,72px);line-height:1;font-weight:700;letter-spacing:-.05em;font-variant-numeric:tabular-nums}
+.big span{font-size:22px;font-weight:600;color:var(--text2)}
+.res-title{margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.squares{display:flex;gap:6px}
+.sq{flex:1;max-width:40px;aspect-ratio:1;border-radius:10px;background:color-mix(in srgb,var(--tc) 78%,#060709)}
+.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.row2 .btn{height:54px}
+.runlist{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.runlist li{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:20px}
+.runlist .i{font:500 12px var(--mono);color:var(--text3);width:16px}
+.runlist .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.runlist .q{font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.runlist .a{font-size:16px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.runlist .pc{font:400 12px var(--mono);color:var(--text2);text-align:right;min-width:36px}
+.runlist .pp{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;min-width:36px}
+#copyFallback{width:100%;min-height:72px;border:1px solid var(--line);border-radius:16px;background:var(--glass);color:var(--text);font:400 14px var(--mono);padding:12px}
+@media (prefers-reduced-motion: reduce){.t-checking .dot{animation:none}.screen.enter{animation:none}}
+@media (min-width:700px){.app{padding-block:28px 32px}}
+</style>
+
+<canvas id="sea" aria-hidden="true"></canvas>
+<div class="glow" aria-hidden="true"></div>
+
+<div class="app">
+
+<section id="home" class="screen" aria-labelledby="homeTitle">
+  <header class="bar">
+    <div class="brand"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" stroke="currentColor" stroke-width="1.2" opacity=".5"/><path d="M7 16C10 12 19 12 24 14.5L27 16 24 17.5C19 20 10 20 7 16Z" stroke="currentColor" stroke-width="1.4"/><circle cx="22.5" cy="15.2" r="1" fill="currentColor"/></svg>The daily descent</div>
+    <span class="chip" id="dayChip">No. 1</span>
+  </header>
+  <div class="hero">
+    <h1 class="wordmark" id="homeTitle">Krillio</h1>
+    <p class="lede">Seven prompts, twenty-five seconds each. The rarer your answer, the deeper your swarm descends.</p>
+  </div>
+  <div class="stage" data-stage aria-hidden="true"></div>
+  <div class="actions">
+    <button class="btn primary" id="practiceBtn" type="button">Start a descent</button>
+    <button class="btn ghost" id="startBtn" type="button">Today’s descent</button>
+    <p class="fine" id="homeNote" style="text-align:center">Descend as often as you like. Today’s descent gives every player the same prompts.</p>
+  </div>
+  <details class="panel">
+    <summary>How to play</summary>
+    <div class="how">
+      <ol class="steps">
+        <li><span class="n">1</span><span>Each prompt names a category. Enter one answer before the timer expires.</span></li>
+        <li><span class="n">2</span><span>Answers that many players give earn few points. Answers that few players think of earn many.</span></li>
+        <li><span class="n">3</span><span>Each point takes your swarm about 15.6 m deeper. A perfect score of 700 reaches the floor of the Challenger Deep, 10,935 m below the surface.</span></li>
+      </ol>
+      <div class="legend">
+        <div class="t-common"><span class="dot"></span>Common<span class="r">0–49</span></div>
+        <div class="t-uncommon"><span class="dot"></span>Uncommon<span class="r">50–79</span></div>
+        <div class="t-rare"><span class="dot"></span>Rare<span class="r">80–94</span></div>
+        <div class="t-unique"><span class="dot"></span>Unique<span class="r">95–100</span></div>
+      </div>
+      <p class="fine">Rarity is based on estimates of how often each answer is given. Answers outside the reference list cannot be checked, so they receive 50 points.</p>
+    </div>
+  </details>
+  <p class="fine footer mono">Next descent in <span class="cd">--:--:--</span></p>
+</section>
+
+<section id="play" class="screen" hidden aria-labelledby="promptText">
+  <header class="bar">
+    <button class="icon-btn" id="quitBtn" type="button" aria-label="Quit to home"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="segs" data-segs aria-hidden="true"></div>
+    <div class="depth-pill mono"><span class="sr-only">Depth </span><span data-glow>0 m</span></div>
+  </header>
+  <div class="prompt-head">
+    <div class="timer" id="timer" role="timer" aria-label="Time left">
+      <svg width="60" height="60" viewBox="0 0 60 60" fill="none" aria-hidden="true"><circle class="track" cx="30" cy="30" r="26" stroke-width="4"/><circle class="arc" id="timerArc" cx="30" cy="30" r="26" stroke-width="4" stroke-linecap="round" stroke-dasharray="163.36" stroke-dashoffset="0"/></svg>
+      <span class="num" id="timerNum">25</span>
+    </div>
+    <p class="eyebrow" id="promptNo">Prompt 1 of 7</p>
+  </div>
+  <h2 class="prompt" id="promptText">Something you’d find inside a lighthouse</h2>
+  <form class="answer" id="answerForm" autocomplete="off">
+    <label for="answerInput" class="sr-only">Your answer</label>
+    <input id="answerInput" name="answer" type="text" maxlength="40" placeholder="Type one thing…" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="go">
+    <button class="btn primary" type="submit">Submit answer</button>
+    <button class="btn quiet" type="button" id="skipBtn">Pass</button>
+  </form>
+  <div class="stage small" data-stage aria-hidden="true"></div>
+</section>
+
+<section id="reveal" class="screen" hidden aria-labelledby="rvAnswer">
+  <header class="bar">
+    <a class="icon-btn" href="#" id="quitBtn2" aria-label="Quit to home"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+    <div class="segs" data-segs aria-hidden="true"></div>
+    <div class="depth-pill mono"><span class="sr-only">Depth </span><span data-glow>0 m</span></div>
+  </header>
+  <p class="fine" id="rvPrompt" style="font-size:15px"></p>
+  <div class="you-said">
+    <p class="eyebrow" id="rvEyebrow">Your answer</p>
+    <h2 id="rvAnswer">—</h2>
+  </div>
+  <div aria-live="polite" style="display:flex;flex-direction:column;gap:12px">
+    <div class="verdict" id="rvVerdict"></div>
+    <p class="verdict-line" id="rvLine"></p>
+  </div>
+  <button class="btn ghost small" type="button" id="skipCheckBtn" hidden style="align-self:flex-start">Skip verification (50 points)</button>
+  <button class="btn primary" type="button" id="nextBtn">Next prompt</button>
+  <div class="stage mid" data-stage aria-hidden="true"></div>
+  <section class="panel dist" aria-labelledby="distTitle">
+    <h3 id="distTitle">Most frequent answers</h3>
+    <ul id="rvDist"></ul>
+    <p class="fine">Percentages are estimates of how often each answer is given.</p>
+  </section>
+</section>
+
+<section id="results" class="screen" hidden aria-labelledby="resLabel">
+  <header class="bar">
+    <div class="brand"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" stroke="currentColor" stroke-width="1.2" opacity=".5"/><path d="M7 16C10 12 19 12 24 14.5L27 16 24 17.5C19 20 10 20 7 16Z" stroke="currentColor" stroke-width="1.4"/><circle cx="22.5" cy="15.2" r="1" fill="currentColor"/></svg>Krillio</div>
+    <button class="icon-btn" id="homeBtnTop" type="button" aria-label="Home"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </header>
+  <div class="stage tall" data-stage aria-hidden="true"></div>
+  <div class="score">
+    <h1 class="eyebrow" id="resLabel">Final depth</h1>
+    <div class="big"><b id="resTotal">0</b><span>m</span></div>
+    <p class="res-title" id="resTitle"></p>
+    <p class="fine mono" id="resPoints"></p>
+  </div>
+  <div class="squares" id="resSquares" role="img" aria-label="Rarity of each answer"></div>
+  <button class="btn primary" type="button" id="againBtn">Descend again</button>
+  <div class="row2">
+    <button class="btn ghost" type="button" id="copyBtn">Copy result</button>
+    <button class="btn ghost" type="button" id="homeBtn">Home</button>
+  </div>
+  <p class="fine" id="copyNote" aria-live="polite"></p>
+  <textarea id="copyFallback" readonly hidden aria-label="Result text to copy"></textarea>
+  <ol class="runlist" id="resList"></ol>
+  <p class="fine footer mono" id="resNext">Next descent in <span class="cd">--:--:--</span></p>
+</section>
+
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* ---------- Prompt bank: [prompt, "Name/alias/alias:est%;..."] ---------- */
+var RAW = [
+["Something you’d find inside a lighthouse","Lamp/light/light bulb/bulb/lantern:34;Stairs/staircase/spiral staircase/steps:18;Lighthouse keeper/keeper:12;Fresnel lens/lens:5;Foghorn/fog horn/horn:5;Mirror/mirrors:4;Window/windows:3;Bed:2;Map/maps:2;Ghost:2"],
+["One of Jupiter’s moons","Europa:30;Io:25;Ganymede:22;Callisto:12;Amalthea:2;Himalia:1;Thebe:1"],
+["Something with teeth that isn’t alive","Comb:30;Saw/chainsaw:22;Zipper/zip:16;Gear/cog/gears:10;Fork:5;Rake:4;Key:3;Stapler:2;Skull:2"],
+["Something you’d pack for a trip to space","Oxygen/oxygen tank/air:16;Helmet/space helmet:14;Food/astronaut food/freeze dried food/snacks:14;Spacesuit/space suit/suit:12;Water:8;Toothbrush:5;Camera:5;Book/books:4;Phone:3;Flag:2"],
+["A famous bridge","Golden Gate Bridge/golden gate:45;Brooklyn Bridge/brooklyn:15;London Bridge:9;Tower Bridge:8;Sydney Harbour Bridge/sydney harbor bridge/harbour bridge:4;Rialto Bridge/rialto:2;Ponte Vecchio:2;Bay Bridge:2;Bridge of Sighs:1;Millau Viaduct:1"],
+["Something that glows in the dark","Firefly/fireflies/lightning bug:22;Glow stick/glowstick:20;Glow-in-the-dark stars/stars/star stickers:12;Moon:6;Jellyfish:5;Watch/clock:5;Night light/nightlight:3;Cat’s eyes/cat eyes/eyes:3;Anglerfish/angler fish:3;Plankton/bioluminescent plankton:2"],
+["A fruit that’s usually red","Strawberry:38;Apple:20;Cherry:20;Raspberry:8;Watermelon:4;Pomegranate:4;Cranberry:3;Tomato:1;Lychee:1"],
+["Something people collect","Stamps:28;Coins:24;Trading cards/cards/baseball cards/pokemon cards:12;Rocks/stones:6;Seashells/shells:5;Books:4;Records/vinyl/vinyl records:4;Comics/comic books:3;Art/paintings:2;Magnets/fridge magnets:2;Spoons:1"],
+["An animal that lives in the Arctic","Polar bear:52;Arctic fox:12;Walrus:8;Seal:7;Narwhal:4;Snowy owl:4;Reindeer/caribou:4;Beluga/beluga whale:2;Musk ox/muskox:1;Arctic hare:1"],
+["Something that’s always cold","Ice/ice cube:35;Freezer:12;Ice cream:10;Snow:10;Antarctica/south pole/north pole:6;Fridge/refrigerator:6;Popsicle/ice pop:3;Glacier:2;Space:2"],
+["Something you’d see in a desert","Cactus/cacti:45;Sand/sand dunes/dunes:18;Camel:14;Snake/rattlesnake:5;Scorpion:4;Mirage:3;Oasis:3;Tumbleweed:3;Pyramids/pyramid:2;Sun:2"],
+["A word that rhymes with “light”","Night:22;Bright:14;Kite:12;Fight:10;White:9;Might:5;Right/write:5;Bite:5;Sight/site:4;Tight:3;Flight:3"],
+["Something that has keys","Piano:42;Keyboard/computer keyboard/laptop:28;Typewriter:5;Key ring/keychain:4;Car:3;Map:3;Door/lock:2;Janitor:2;Organ:2;Accordion:1"],
+["A job that involves water","Lifeguard:30;Plumber:22;Fisherman/fisher/fishing:12;Sailor:8;Diver/scuba diver:6;Marine biologist:5;Swim instructor/swim coach/swimming instructor:4;Firefighter/fireman:4;Ship captain/captain:2"],
+["Something you’d find in a toolbox","Hammer:48;Screwdriver:20;Wrench/spanner:10;Nails:6;Screws:4;Pliers:4;Tape measure/measuring tape:3;Drill:2;Saw:1"],
+["Something that spins","Top/spinning top:18;Wheel:15;Fan/ceiling fan:15;Earth/planet:10;Washing machine:6;Fidget spinner:6;Windmill/wind turbine:4;Record/vinyl:3;Carousel/merry-go-round:3;Tornado:3;Ballerina/dancer:2"],
+["Something that comes in pairs","Socks:38;Shoes:26;Gloves:8;Earrings:6;Twins:5;Eyes:4;Chopsticks:3;Ears:2;Dice:2"],
+["A musical instrument with strings","Guitar:55;Violin/fiddle:20;Harp:6;Piano:5;Cello:5;Banjo:3;Ukulele:3;Bass/bass guitar/double bass:2;Viola:1;Sitar:1"],
+["Something you’d find on the Moon","Craters/crater:28;Flag/american flag:24;Moon rocks/rocks:14;Moon dust/dust:10;Footprints/footprint:8;Astronaut:4;Lunar rover/rover:3;Cheese:3;Lunar module/lander:2"],
+["A breakfast food","Eggs:24;Pancakes:20;Cereal:18;Bacon:10;Toast:8;Waffles:6;Oatmeal/porridge:4;French toast:2;Yogurt/yoghurt:2;Bagel:2"],
+["Something that’s purple","Grapes/grape:24;Eggplant/aubergine:18;Lavender:10;Plum:8;Violet/violets:6;Amethyst:5;Barney:4;Lilac:4;Red cabbage/purple cabbage:2"],
+["Something with a tail","Dog:28;Cat:24;Comet:10;Kite:6;Monkey:5;Fish:4;Mouse:4;Horse:4;Airplane/plane:3;Lizard:3;Coin:1"],
+["Something you’d find at the beach","Sand:30;Seashells/shells:20;Waves/ocean/sea:14;Beach umbrella/umbrella:8;Towel/beach towel:6;Crab:6;Sunscreen:4;Seagull/gull:3;Sandcastle:3;Lifeguard:2"],
+["A country with a long coastline","Canada:30;Australia:20;Norway:10;Indonesia:8;Russia:8;United States/usa/us/america:6;Chile:6;Philippines:4;Japan:3;Brazil:2"],
+["Something that melts","Ice:40;Ice cream:18;Chocolate:12;Snow:10;Butter:7;Candle/wax:6;Cheese:4;Glacier:2;Metal:1"],
+["Something you’d find in a haunted house","Ghost/ghosts:48;Cobwebs/cobweb/spider webs/spiderweb:12;Skeleton:8;Bats/bat:6;Spider:5;Coffin:3;Candles/candle:3;Chains:2;Vampire:2;Zombie:2"],
+["A shape with more than four sides","Hexagon:45;Pentagon:22;Octagon:20;Heptagon:4;Decagon:3;Star:2;Nonagon:1;Dodecagon:1"],
+["Something that floats","Boat:28;Balloon:12;Rubber duck/duck:8;Iceberg/ice:8;Leaf:6;Cork:5;Wood/log:5;Cloud:4;Raft:3;Buoy:3;Ghost:2"],
+["Something with a shell","Turtle:35;Snail:25;Crab:10;Egg:10;Tortoise:6;Clam:4;Armadillo:3;Oyster:3;Nut/walnut/peanut:3;Lobster:2"],
+["Something you can’t see","Air:40;Wind:15;Ghost/ghosts:8;Oxygen:5;Love:4;Sound:3;Gravity:3;Germs/bacteria:3;Wi-Fi/wifi:3;Time:2"],
+["A word that starts with “Z”","Zebra:45;Zoo:20;Zero:8;Zipper:7;Zombie:6;Zone:4;Zucchini:3;Zen:2;Zigzag:2;Zest:1"],
+["Something in a kitchen drawer","Forks/fork:20;Spoons/spoon:20;Knives/knife:16;Scissors:6;Batteries:6;Spatula:5;Rubber bands:4;Tape:4;Can opener:4;Takeout menus/menus:3"],
+["A planet in our solar system","Mars:30;Jupiter:20;Saturn:15;Earth:12;Venus:7;Mercury:5;Neptune:5;Uranus:4"],
+["Something that’s sticky","Glue:40;Honey:22;Tape:14;Gum/chewing gum/bubble gum:7;Syrup/maple syrup:6;Slime:3;Candy:2;Jam:2;Sap:2"],
+["A famous painting","Mona Lisa:55;The Starry Night/starry night:20;The Scream/scream:9;Girl with a Pearl Earring:4;The Last Supper/last supper:4;American Gothic:2;Guernica:2;The Birth of Venus/birth of venus:2;Water Lilies:1"],
+["Something you’d hear in a forest","Birds/birdsong/bird:45;Wind:10;Rustling leaves/leaves:9;Owl/owls:6;Woodpecker:5;Crickets/insects/bugs:4;Stream/water/river:4;Twigs snapping/branches:3;Bear:3;Wolves/wolf/howling:2"],
+["A sport played with a ball","Soccer/football:32;Basketball:24;Baseball:12;Tennis:10;Volleyball:6;Golf:4;American football:3;Rugby:3;Cricket:2;Bowling:2"],
+["Something with wings","Bird:35;Airplane/plane:20;Butterfly:12;Bat:8;Bee:5;Angel:5;Dragon:4;Fly:3;Dragonfly:2;Chicken:2"],
+["Something that’s square","Box:18;Window:8;Tile:8;Chessboard/checkerboard:8;Sticky note/post-it:5;Napkin:4;Cracker:4;Waffle:3;Sandwich:3;Picture frame/frame:3"],
+["Something you’d find in a library","Books/book:62;Librarian:12;Bookshelves/shelves/bookshelf:7;Computers/computer:4;Desk/table:3;Magazines:3;Silence/quiet:3;Bookmark:2;Library card:2"],
+["A sea creature with tentacles","Octopus:55;Squid:22;Jellyfish:14;Cuttlefish:3;Sea anemone/anemone:3;Nautilus:1;Kraken:1;Portuguese man o’ war/man o war:1"],
+["Something that ticks","Clock:62;Watch:20;Time bomb/bomb:10;Metronome:4;Kitchen timer/timer:3"],
+["Something you’d find in a hospital","Doctor/doctors:22;Nurse/nurses:16;Bed/hospital bed:12;Stethoscope:8;Wheelchair:7;Needle/syringe:6;Patient/patients:6;Medicine/pills:5;Ambulance:4;Bandage/bandages:3"],
+["A vegetable that grows underground","Carrot:42;Potato:30;Onion:6;Beet/beetroot:5;Radish:4;Sweet potato:3;Turnip:3;Garlic:3;Parsnip:2;Ginger:1"],
+["Something you’d bring to a picnic","Blanket/picnic blanket:24;Basket/picnic basket:18;Sandwiches/sandwich:16;Food:8;Fruit:5;Drinks/lemonade:5;Chips/crisps:4;Napkins:3;Plates:2;Cooler:2"],
+["Something that has a screen","Phone/smartphone/cell phone/mobile:36;TV/television:24;Computer/laptop/monitor:20;Tablet/ipad:6;Watch/smartwatch:3;ATM:2;Car:2;Microwave:1;Camera:1"],
+["A dog breed","Labrador/lab/labrador retriever:20;Golden retriever:16;German shepherd:12;Poodle:9;Bulldog:7;Beagle:6;Chihuahua:6;Husky:5;Dalmatian:3;Pug:3"],
+["Something you’d find in a bathroom","Toilet:34;Toothbrush:16;Sink:10;Shower:8;Bathtub/bath/tub:6;Towel:6;Soap:6;Mirror:5;Toothpaste:3;Toilet paper:3"],
+["A flower","Rose:46;Tulip:14;Sunflower:10;Daisy:8;Lily:6;Orchid:4;Daffodil:3;Lavender:2;Carnation:2;Lotus:1"],
+["Something that’s yellow","Banana:28;Sun:22;Lemon:16;School bus/bus:5;Taxi/cab:4;Sunflower:4;Corn:3;Cheese:3;Rubber duck/duck:3;Pineapple:2"],
+["Something you’d find in space","Stars/star:34;Planets/planet:18;Moon:12;Astronaut:7;Asteroid/asteroids:6;Black hole:6;Satellite:5;Comet:4;Rocket:3;Aliens/alien:3"],
+["Something with a lid","Box:16;Jar:16;Pot/saucepan:14;Trash can/bin:10;Toilet:8;Cup/coffee cup:6;Laptop:5;Bottle:4;Coffin:2;Piano:2"],
+["An Olympic sport","Swimming:24;Gymnastics:18;Running/track/athletics:16;Diving:6;Boxing:5;Fencing:4;Basketball:4;Archery:4;Cycling:3;Wrestling:3"],
+["Something that’s round","Ball:40;Circle:10;Wheel:10;Plate:6;Sun:5;Coin:5;Clock:4;Pizza:4;Orange:3;Earth/globe:3"],
+["A kind of weather","Rain:36;Snow:20;Sunshine/sun/sunny:14;Wind/windy:8;Storm/thunderstorm:6;Fog/foggy:5;Hail:4;Clouds/cloudy:4;Tornado:2;Sleet:1"],
+["Something you’d see at a circus","Clown/clowns:46;Elephant:12;Tent/big top:8;Lion:8;Acrobat/acrobats:7;Juggler:5;Tightrope/tightrope walker:4;Ringmaster:3;Trapeze:3;Unicycle:2"],
+["A word that rhymes with “cat”","Hat:34;Bat:20;Mat:12;Rat:10;Sat:5;Fat:5;That:4;Flat:3;Chat:2;Splat:1"],
+["Something you’d wear in winter","Coat/jacket:30;Scarf:20;Gloves/mittens:16;Hat/beanie:14;Boots:10;Sweater/jumper:5;Earmuffs:2;Thermals:1"],
+["A sea animal","Shark:26;Whale:20;Dolphin:16;Octopus:8;Fish:6;Jellyfish:5;Starfish/sea star:4;Seal:3;Crab:3;Sea turtle/turtle:3"],
+["Something that has buttons","Shirt:26;Remote/remote control/tv remote:22;Phone:10;Coat/jacket:8;Keyboard:6;Elevator/lift:5;Calculator:5;Game controller/controller:4;Microwave:3;Jeans/pants:2"],
+["A board game","Monopoly:40;Chess:18;Scrabble:12;Clue/cluedo:6;Checkers/draughts:6;Risk:4;Snakes and ladders/chutes and ladders:4;Catan/settlers of catan:3;Sorry:2;Battleship:2"],
+["Something you can recycle","Paper:30;Plastic/plastic bottles/bottles:26;Glass:12;Cans/aluminum cans/aluminium cans:12;Cardboard:10;Newspaper:3;Batteries:2;Clothes:1"],
+["A famous scientist","Albert Einstein/einstein:50;Isaac Newton/newton:18;Marie Curie/curie:8;Charles Darwin/darwin:6;Nikola Tesla/tesla:5;Stephen Hawking/hawking:5;Galileo/galileo galilei:4;Thomas Edison/edison:2;Ada Lovelace/lovelace:1;Rosalind Franklin:1"],
+["Something you’d find in a classroom","Desk/desks:24;Teacher:18;Whiteboard/blackboard/chalkboard/board:16;Chairs/chair:8;Books:6;Pencils/pencil:6;Students:5;Clock:3;Globe:2;Map:2"],
+["A type of tree","Oak:36;Pine:20;Maple:12;Palm/palm tree:8;Birch:5;Willow:5;Apple tree:4;Cherry tree/cherry blossom:3;Redwood/sequoia:3;Fir/christmas tree:3"],
+["Something you do at a party","Dance/dancing:40;Eat/eating:12;Sing/singing/karaoke:10;Drink/drinking:8;Talk/chat/socialize:8;Play games/games:6;Laugh:3;Eat cake/cake:3;Open presents/presents:2;Take photos:1"],
+["Something that’s hot","Sun:36;Fire:24;Stove/oven:8;Lava:8;Coffee:6;Soup:3;Chili pepper/chili/pepper:3;Desert:3;Tea:2;Sauna:1"],
+["A dessert","Cake:30;Ice cream:26;Pie/apple pie:10;Cookies/cookie:8;Brownies/brownie:6;Cheesecake:4;Pudding:4;Tiramisu:3;Donut/doughnut:2;Cupcake:2"],
+["Something you’d find in a garden","Flowers/flower:36;Grass:10;Plants:6;Garden gnome/gnome:6;Tree:6;Hose:5;Bench:4;Shovel/spade:4;Worms/worm:4;Bees/bee:3"],
+["Something people are afraid of","Spiders/spider:34;Heights:16;Snakes/snake:12;The dark/dark:10;Clowns/clown:6;Death/dying:5;Public speaking:4;Needles:3;Ghosts:3;Sharks:2"],
+["A musical instrument you blow into","Flute:28;Trumpet:24;Saxophone/sax:14;Clarinet:8;Harmonica:6;Trombone:5;Recorder:5;Tuba:4;Oboe:2;Bagpipes:2"],
+["A city in Europe","Paris:36;London:24;Rome:12;Berlin:8;Madrid:5;Barcelona:4;Amsterdam:4;Vienna:2;Prague:2;Venice:2"],
+["Something with a handle","Door:22;Mug/cup:22;Bag/handbag/purse:10;Suitcase:8;Pan/frying pan:8;Knife:4;Broom:4;Umbrella:4;Hammer:3;Bucket:3"],
+["Something you’d find in a car","Steering wheel:30;Seats/seat:16;Seatbelt/seat belt:12;Radio:8;Rearview mirror/mirror:6;Engine:5;Keys:4;Glove box/glovebox:4;Gear stick/gearshift:3;Airbag:3"],
+["Something you’d see on a farm","Cow/cows:36;Tractor:16;Pig/pigs:12;Barn:10;Chicken/chickens:8;Horse:6;Sheep:5;Haystack/hay:3;Farmer:2;Goat:2"],
+["A type of bird","Eagle:22;Robin:12;Parrot:10;Owl:9;Penguin:8;Pigeon:7;Sparrow:6;Crow:5;Flamingo:4;Hummingbird:4"],
+["Something that has stripes","Zebra:56;Tiger:20;Flag/american flag:6;Candy cane:4;Bee:4;Shirt:2;Barber pole:2;Crosswalk/zebra crossing:2;Skunk:1;Referee:1"],
+["A reason to be late","Traffic:46;Overslept/oversleeping/alarm:20;Car trouble/flat tire/car broke down:8;Missed the bus/bus/train:6;Weather/snow/rain:4;Kids:3;Lost keys/keys:3;Got lost/lost:3;Sick:2;Accident:2"],
+["Something made of glass","Window:38;Drinking glass/glass/cup:14;Bottle:12;Mirror:10;Eyeglasses/spectacles/eyewear:6;Vase:5;Jar:4;Light bulb:3;Windshield/windscreen:2;Marble:1"],
+["A job that uses a uniform","Police officer/police/cop:28;Nurse:14;Firefighter/fireman:12;Soldier:10;Doctor:8;Pilot:6;Chef:5;Mail carrier/postman/mailman:4;Waiter:3;Flight attendant:2"],
+["Something you’d find at a birthday party","Cake/birthday cake:44;Balloons/balloon:20;Presents/gifts/present:14;Candles/candle:8;Party hats/hats:4;Ice cream:3;Friends/guests:2;Pinata:2;Decorations/streamers:2;Games:1"],
+["Something that has a horn","Car:34;Rhino/rhinoceros:16;Unicorn:14;Bull/cow:8;Truck:6;Goat:5;Train:4;Bicycle/bike:2;Ship/boat:2;Ram:2"],
+["An item in a first aid kit","Bandage/bandages/band-aid/plaster:46;Gauze:8;Antiseptic/disinfectant:8;Scissors:6;Medical tape/tape:5;Gloves:5;Tweezers:5;Painkillers/aspirin/ibuprofen:4;Thermometer:2;Ointment/cream:2"],
+["Something that can fly","Bird:40;Airplane/plane:24;Helicopter:6;Butterfly:5;Kite:5;Drone:4;Bat:4;Bee:3;Hot air balloon/balloon:3;Superman:2"],
+["Something you’d find in a forest","Trees/tree:40;Bear:10;Deer:8;Mushrooms/mushroom:8;Leaves:5;Squirrel:5;Moss:3;Owl:3;Wolf:3;Stream/river:2"],
+["Something you plug in","Phone charger/charger/phone:30;Lamp:14;TV/television:12;Computer/laptop:12;Toaster:6;Hair dryer/hairdryer:5;Kettle:4;Fridge:3;Microwave:3;Vacuum cleaner/vacuum:3"],
+["A pizza topping","Pepperoni:44;Cheese/mozzarella:14;Mushrooms/mushroom:12;Pineapple:7;Olives/olive:5;Sausage:4;Onions/onion:4;Ham:3;Peppers/bell peppers/pepper:3;Anchovies:2"],
+["Something you’d find on a desk","Computer/laptop/monitor:28;Pen/pens:18;Paper/papers:12;Lamp/desk lamp:10;Pencil:6;Keyboard:5;Stapler:5;Mug/cup/coffee:4;Notebook:4;Phone:3"],
+["Something that’s soft","Pillow:36;Blanket:10;Cotton/cotton ball:10;Feather:8;Teddy bear/stuffed animal/plush toy:8;Kitten/cat/fur:6;Bed:5;Marshmallow:4;Cloud:4;Silk:2"],
+["A shade of blue","Navy/navy blue:30;Sky blue/light blue:22;Royal blue:12;Turquoise/teal:10;Baby blue:8;Cyan:4;Cobalt:3;Aqua:3;Indigo:3;Azure:2"],
+["Something that’s loud","Thunder:24;Fire alarm/alarm/siren:14;Drums/drum:10;Airplane/jet:8;Fireworks:8;Baby/crying baby:8;Concert/music:6;Car horn/horn:5;Explosion:4;Lion/roar:4"],
+["A cheese","Cheddar:38;Mozzarella:16;Swiss:10;Parmesan:8;Brie:6;Gouda:5;Feta:4;Blue cheese/stilton/roquefort:3;Camembert:3;Provolone:2"],
+["Something you’d find in a wallet","Money/cash/bills:42;Credit card/cards/debit card/card:24;ID/drivers license/license:16;Receipts/receipt:5;Coins/change:4;Photo/photos:3;Gift card:1;Business card:1;Ticket:1"],
+["A mythical creature","Dragon:38;Unicorn:28;Mermaid:8;Phoenix:6;Griffin/gryphon:4;Pegasus:3;Centaur:3;Fairy:3;Bigfoot/sasquatch:2;Kraken:1"],
+["A part of the body","Arm:16;Hand:14;Head:14;Leg:12;Eye/eyes:10;Nose:8;Heart:6;Foot/feet:6;Finger:4;Ear:3"],
+["Something you’d find in a castle","King:14;Knight/knights:14;Throne:12;Moat:10;Tower:10;Princess/queen:8;Suit of armor/armor/armour:6;Drawbridge:6;Dragon:5;Dungeon:4"],
+["Something that’s green","Grass:44;Leaves/leaf/tree/trees:12;Frog:10;Broccoli:6;Lime:5;Cucumber:3;Money/dollar:3;Emerald:3;Peas:3;Avocado:2"],
+["A kind of shoe","Sneakers/trainers/running shoes:30;Boots:20;Sandals:14;High heels/heels:12;Flip flops/thongs:8;Slippers:6;Loafers:3;Crocs:2;Clogs:1;Oxfords:1"],
+["Something you’d find on a pirate ship","Treasure/treasure chest/gold:26;Pirates/pirate/captain:14;Parrot:10;Jolly Roger/flag/skull and crossbones:10;Cannons/cannon:10;Sword/swords/cutlass:6;Plank:6;Treasure map/map:5;Rum:4;Anchor:4"],
+["A word that starts with “Q”","Queen:52;Question:14;Quiet:8;Quick:6;Quilt:5;Quack:3;Quiz:3;Quarter:3;Quest:2;Quail:2"]
+];
+
+function norm(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()
+    .replace(/^(a|an|the|some|my)\s+/, '');
+}
+function stemWord(w) {
+  if (w.length > 4 && /ies$/.test(w)) return w.slice(0, -3) + 'y';
+  if (w.length > 4 && /(ch|sh|x|ss)es$/.test(w)) return w.slice(0, -2);
+  if (w.length > 3 && /s$/.test(w) && !/(ss|us)$/.test(w)) return w.slice(0, -1);
+  return w;
+}
+function key(s) { return norm(s).split(' ').filter(Boolean).map(stemWord).join(''); }
+
+var PROMPTS = RAW.map(function (r) {
+  return {
+    text: r[0],
+    answers: r[1].split(';').map(function (e) {
+      var parts = e.split(':'); var names = parts[0].split('/');
+      return { name: names[0], w: Number(parts[1]), keys: names.map(key) };
+    }).sort(function (a, b) { return b.w - a.w; })
+  };
+});
+
+function lev(a, b, cap) {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  var prev = [], cur = [], i, j;
+  for (j = 0; j <= b.length; j++) prev[j] = j;
+  for (i = 1; i <= a.length; i++) {
+    cur = [i]; var best = i;
+    for (j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > cap) return cap + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+function matchEntry(p, raw) {
+  var k = key(raw); if (!k) return null;
+  var i, j, e;
+  for (i = 0; i < p.answers.length; i++) { e = p.answers[i]; if (e.keys.indexOf(k) >= 0) return e; }
+  if (k.length < 5) return null;
+  var cap = k.length >= 9 ? 2 : 1, best = null, bestD = cap + 1, d;
+  for (i = 0; i < p.answers.length; i++) {
+    e = p.answers[i];
+    for (j = 0; j < e.keys.length; j++) {
+      if (e.keys[j].length < 4) continue;
+      d = lev(k, e.keys[j], cap);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+  }
+  return best;
+}
+
+/* ---------- Scoring ---------- */
+var TIER = {
+  none: { label: 'No points', hex: '#8B8B95', krill: 0, ks: 1, sq: '⬛' },
+  unverified: { label: 'Unverified', hex: '#A1A1AA', krill: 2, ks: .9, sq: '◽' },
+  common: { label: 'Common', hex: '#B4B4BB', krill: 2, ks: .85, sq: '◽' },
+  uncommon: { label: 'Uncommon', hex: '#D4D4D9', krill: 3, ks: 1, sq: '◻️' },
+  rare: { label: 'Rare', hex: '#EDEDF0', krill: 5, ks: 1.12, sq: '⬜' },
+  unique: { label: 'Unique', hex: '#FFFFFF', krill: 8, ks: 1.25, sq: '⭐' }
+};
+function pointsFor(pct) { pct = Math.min(1, Math.max(0, pct)); return Math.round(100 * Math.pow(1 - pct, 2)); }
+function tierOf(r) {
+  if (r.status === 'skip' || r.status === 'timeout' || r.status === 'invalid') return 'none';
+  if (r.status === 'unverified') return 'unverified';
+  if (r.pts < 50) return 'common';
+  if (r.pts < 80) return 'uncommon';
+  if (r.pts < 95) return 'rare';
+  return 'unique';
+}
+/* ---------- Depth: 700 points = 10,935 m, the Challenger Deep ---------- */
+var FLOOR = 10935;
+function depthOf(points) { return Math.round(points * FLOOR / 700); }
+function fmtM(m) { return Math.round(m).toLocaleString('en-US') + ' m'; }
+var ZONES = [[0, 'Sunlight Zone'], [200, 'Twilight Zone'], [1000, 'Midnight Zone'], [4000, 'Abyssal Zone'], [6000, 'Hadal Zone']];
+function zoneOf(m) { var z = ZONES[0][1]; ZONES.forEach(function (e) { if (m >= e[0]) z = e[1]; }); return z; }
+var MARKERS = [
+  [200, 'Twilight Zone', 'Sunlight fades; photosynthesis stops'],
+  [500, '', 'Lanternfish shelter here by day'],
+  [800, '', 'Vampire squid range'],
+  [1000, 'Midnight Zone', 'No sunlight reaches below'],
+  [3688, '', 'Average depth of the ocean'],
+  [4000, 'Abyssal Zone', 'Water near 2 °C'],
+  [5000, '', 'Abyssal plains, the flattest ground on Earth'],
+  [6000, 'Hadal Zone', 'The ocean trenches begin'],
+  [8336, '', 'Deepest fish ever filmed'],
+  [10935, 'Challenger Deep', 'The ocean floor']
+];
+
+function pctLabel(pct) { if (pct == null) return '—'; var p = pct * 100; return p < 1 ? '<1%' : Math.round(p) + '%'; }
+function tidy(s) { s = String(s).trim().replace(/\s+/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/* ---------- Days ---------- */
+var EPOCH = new Date(2026, 10, 8);
+function today() {
+  var d = new Date(); var mid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var no = Math.max(1, Math.round((mid - EPOCH) / 86400000) + 1);
+  var k = mid.getFullYear() + '-' + String(mid.getMonth() + 1).padStart(2, '0') + '-' + String(mid.getDate()).padStart(2, '0');
+  return { no: no, key: k };
+}
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function permFor(seed) { var r = rng(seed * 7919 + 101), a = PROMPTS.map(function (_, i) { return i; }); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function dailyPrompts(no) {
+  var n = PROMPTS.length - PROMPTS.length % 7, out = [];
+  for (var j = 0; j < 7; j++) { var g = (no - 1) * 7 + j; out.push(permFor(Math.floor(g / n))[g % n]); }
+  return out;
+}
+function practicePrompts(exclude) {
+  var pool = PROMPTS.map(function (_, i) { return i; }).filter(function (i) { return exclude.indexOf(i) < 0; });
+  for (var i = pool.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+  return pool.slice(0, 7);
+}
+
+/* ---------- Storage (per-viewer convenience only) ---------- */
+function load(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+/* ---------- DOM ---------- */
+function $(id) { return document.getElementById(id); }
+function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+var input = $('answerInput');
+
+var T = today();
+var S = { mode: 'daily', dayNo: T.no, dayKey: T.key, prompts: dailyPrompts(T.no), answers: [], pending: null, screen: 'home' };
+function dailyKey() { return 'krillio.daily.' + S.dayKey; }
+function total(list) { return (list || S.answers).reduce(function (s, a) { return s + (a.pts || 0); }, 0); }
+function saveDaily() { if (S.mode === 'daily') store(dailyKey(), { prompts: S.prompts, answers: S.answers }); }
+
+function show(id) {
+  ['home', 'play', 'reveal', 'results'].forEach(function (s) { var n = $(s); n.hidden = s !== id; if (s === id) { n.classList.remove('enter'); void n.offsetWidth; n.classList.add('enter'); } });
+  S.screen = id;
+  window.scrollTo(0, 0);
+}
+
+function renderBars() {
+  var cur = S.answers.length;
+  document.querySelectorAll('[data-segs]').forEach(function (box) {
+    box.textContent = '';
+    for (var i = 0; i < 7; i++) {
+      var s = el('span', 'seg');
+      if (i < cur) { s.classList.add('on', 't-' + S.answers[i].tier); }
+      else if (i === cur && S.screen === 'play') s.classList.add('now');
+      box.appendChild(s);
+    }
+  });
+  document.querySelectorAll('[data-glow]').forEach(function (n) { n.textContent = fmtM(depthOf(total())); });
+}
+
+/* ---------- Home ---------- */
+function renderHome() {
+  T = today();
+  $('dayChip').textContent = 'No. ' + T.no;
+  var saved = load('krillio.daily.' + T.key);
+  var n = saved && saved.answers ? saved.answers.length : 0;
+  var btn = $('startBtn'), note = $('homeNote');
+  if (n >= 7) { btn.textContent = 'View today’s descent'; note.textContent = 'Today’s depth: ' + fmtM(depthOf(total(saved.answers))) + '. You can start a new descent at any time.'; }
+  else if (n > 0) { btn.textContent = 'Resume today’s descent (' + n + ' of 7)'; note.textContent = 'Your progress in today’s descent has been saved.'; }
+  else { btn.textContent = 'Today’s descent'; note.textContent = 'Descend as often as you like. Today’s descent gives every player the same prompts.'; }
+  Sea.setDepth(0, false);
+}
+function beginDaily() {
+  T = today();
+  var saved = load('krillio.daily.' + T.key);
+  S.mode = 'daily'; S.dayNo = T.no; S.dayKey = T.key;
+  S.prompts = saved && saved.prompts && saved.prompts.length === 7 ? saved.prompts : dailyPrompts(T.no);
+  S.answers = saved && saved.answers ? saved.answers : [];
+  Sea.reset(); S.answers.forEach(function (a) { Sea.addTier(a.tier, null); });
+  Sea.setDepth(depthOf(total()), false);
+  if (S.answers.length >= 7) { renderResults(); show('results'); return; }
+  startPrompt();
+}
+function beginPractice() {
+  var recent = load('krillio.recent') || [];
+  S.mode = 'practice'; S.prompts = practicePrompts(dailyPrompts(today().no).concat(recent)); S.answers = [];
+  store('krillio.recent', recent.concat(S.prompts).slice(-42));
+  Sea.reset(); Sea.setDepth(0, false);
+  startPrompt();
+}
+
+/* ---------- Play ---------- */
+var C = 163.36, timer = { raf: 0, end: 0, on: false }, busy = false;
+function startPrompt() {
+  busy = false;
+  var p = PROMPTS[S.prompts[S.answers.length]];
+  $('promptText').textContent = p.text;
+  $('promptNo').textContent = (S.mode === 'practice' ? '' : 'Today · ') + 'Prompt ' + (S.answers.length + 1) + ' of 7';
+  input.value = '';
+  show('play');
+  renderBars();
+  input.focus();
+  startTimer();
+}
+function startTimer() {
+  cancelAnimationFrame(timer.raf);
+  timer.end = performance.now() + 25000; timer.on = true;
+  var arc = $('timerArc'), num = $('timerNum'), box = $('timer'), lastSec = -1;
+  function tick() {
+    if (!timer.on) return;
+    var left = Math.max(0, timer.end - performance.now());
+    var sec = Math.ceil(left / 1000);
+    if (sec !== lastSec) { num.textContent = sec; box.setAttribute('aria-label', sec + ' seconds left'); lastSec = sec; }
+    arc.style.strokeDashoffset = (C * (1 - left / 25000)).toFixed(2);
+    box.classList.toggle('warn', left <= 5000);
+    if (left <= 0) { timer.on = false; lockIn(input.value, 'timeout'); return; }
+    timer.raf = requestAnimationFrame(tick);
+  }
+  tick();
+}
+function stopTimer() { timer.on = false; cancelAnimationFrame(timer.raf); }
+
+var samplePromise = (window.claude && typeof window.claude.use === 'function') ? window.claude.use('sample').catch(function () { return null; }) : Promise.resolve(null);
+var judgeCtl = null, skipTimer = 0;
+
+function judgePrompt(p, raw) {
+  return 'You are the judge in a word game. Players must name one thing that fits the prompt.\n' +
+    'Prompt: "' + p.text + '"\nPlayer answer: "' + raw.replace(/"/g, "'") + '"\n\n' +
+    'Decide whether the answer is a real, reasonable fit. Be generous with misspellings and informal wording; reject nonsense, random words and answers that do not fit the prompt. ' +
+    'Then estimate what percent of typical adult players would give this same answer (0-100).\n' +
+    'Reply with only JSON, for example {"valid": true, "name": "Fresnel lens", "percent": 2}. "name" is the answer with tidy spelling and capitalization.';
+}
+function judge(p, raw) {
+  return samplePromise.then(function (sample) {
+    if (!sample || typeof sample.json !== 'function') return { status: 'unverified', raw: raw, name: tidy(raw), pct: null };
+    judgeCtl = new AbortController();
+    skipTimer = setTimeout(function () { $('skipCheckBtn').hidden = false; }, 4000);
+    return sample.json(judgePrompt(p, raw), { modelTier: 'quick', signal: judgeCtl.signal }).then(function (j) {
+      if (!j || typeof j !== 'object' || typeof j.valid !== 'boolean') return { status: 'unverified', raw: raw, name: tidy(raw), pct: null };
+      var name = (typeof j.name === 'string' && j.name.trim()) ? tidy(j.name).slice(0, 40) : tidy(raw);
+      if (!j.valid) return { status: 'invalid', raw: raw, name: tidy(raw), pct: null };
+      var m = matchEntry(p, name);
+      if (m) return { status: 'listed', raw: raw, name: name, group: m.name, pct: m.w / 100 };
+      var pc = Number(j.percent); if (!isFinite(pc)) pc = 3;
+      return { status: 'judged', raw: raw, name: name, pct: Math.min(60, Math.max(0, pc)) / 100 };
+    }, function (e) {
+      var code = e && e.code;
+      if (code === 'not_granted' || code === 'sampling_disabled' || code === 'not_declared' || code === 'capability_disabled' || code === 'capability_removed') samplePromise = Promise.resolve(null);
+      return { status: 'unverified', raw: raw, name: tidy(raw), pct: null };
+    });
+  }).then(function (r) {
+    clearTimeout(skipTimer); $('skipCheckBtn').hidden = true; judgeCtl = null;
+    return r;
+  });
+}
+
+function lockIn(raw, reason) {
+  if (busy) return; busy = true;
+  stopTimer(); input.blur();
+  var p = PROMPTS[S.prompts[S.answers.length]];
+  var t = String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  var r;
+  if (!t) r = { status: reason === 'timeout' ? 'timeout' : 'skip', raw: '', name: '', pct: null };
+  else {
+    var m = matchEntry(p, t);
+    r = m ? { status: 'listed', raw: t, name: m.keys.indexOf(key(t)) >= 0 ? tidy(t) : m.name, group: m.name, pct: m.w / 100 } : { status: 'checking', raw: t, name: tidy(t), pct: null };
+  }
+  S.pending = r;
+  show('reveal');
+  if (r.status === 'checking') { renderReveal(p, r); judge(p, t).then(function (res) { finalize(p, res); }); }
+  else finalize(p, r);
+}
+function finalize(p, r) {
+  if (r.status === 'listed' || r.status === 'judged') r.pts = pointsFor(r.pct);
+  else if (r.status === 'unverified') r.pts = 50;
+  else r.pts = 0;
+  r.tier = tierOf(r);
+  r.p = S.prompts[S.answers.length];
+  var before = depthOf(total()), after = depthOf(total() + r.pts);
+  r.dm = after - before;
+  r.zoneNote = zoneOf(after) !== zoneOf(before) ? 'Your swarm has entered the ' + zoneOf(after) + '.' : '';
+  Sea.setDepth(after, true);
+  S.answers.push({ p: r.p, raw: r.raw, name: r.name, group: r.group || null, pct: r.pct, pts: r.pts, tier: r.tier, status: r.status });
+  S.pending = null;
+  saveDaily();
+  renderReveal(p, r);
+  renderBars();
+  var b = $('rvVerdict').getBoundingClientRect();
+  Sea.addTier(r.tier, { x: b.left + 60, y: b.top + b.height / 2 });
+}
+
+/* ---------- Reveal ---------- */
+var LINES = {
+  common: 'A frequent response.',
+  uncommon: 'A less common response.',
+  rare: 'Few players give this answer.',
+  unique: 'Almost no one gives this answer.'
+};
+function renderReveal(p, r) {
+  $('rvPrompt').textContent = p.text;
+  $('rvEyebrow').textContent = r.status === 'timeout' ? 'Time expired' : r.status === 'skip' ? 'Passed' : 'Your answer';
+  $('rvAnswer').textContent = r.name || '—';
+  var v = $('rvVerdict'); v.textContent = '';
+  var tier = r.status === 'checking' ? 'checking' : r.tier;
+  v.className = 'verdict t-' + tier;
+  var badge = el('span', 'badge'); badge.appendChild(el('span', 'dot'));
+  badge.appendChild(document.createTextNode(r.status === 'checking' ? 'Verifying' : TIER[r.tier].label));
+  v.appendChild(badge);
+  if (r.status !== 'checking') {
+    v.appendChild(el('span', 'pts mono', '+' + r.pts));
+    v.appendChild(el('span', 'fine mono', r.dm ? '+' + fmtM(r.dm) + ' deeper' : 'No descent'));
+  }
+  var line;
+  if (r.status === 'checking') line = 'This answer is not in the reference list. Claude is verifying that it fits the prompt.';
+  else if (r.status === 'timeout') line = 'No answer was entered in time, so this prompt earns no points.';
+  else if (r.status === 'skip') line = 'You passed on this prompt, so it earns no points.';
+  else if (r.status === 'invalid') line = 'This answer does not fit “' + p.text + '”, so it earns no points.';
+  else if (r.status === 'unverified') line = 'This answer is not in the reference list, so it receives 50 points.';
+  else line = 'An estimated ' + pctLabel(r.pct) + ' of players give this answer. ' + LINES[r.tier];
+  if (r.zoneNote) line += ' ' + r.zoneNote;
+  $('rvLine').textContent = line;
+  var next = $('nextBtn');
+  next.disabled = r.status === 'checking';
+  next.textContent = r.status === 'checking' ? 'Verifying…' : (S.answers.length >= 7 ? 'View your result' : 'Next prompt');
+
+  var list = $('rvDist'); list.textContent = '';
+  var top = p.answers.slice(0, 5), mineKey = r.group ? key(r.group) : (r.name ? key(r.name) : ''), mineShown = false;
+  var max = top[0] ? top[0].w : 1;
+  top.forEach(function (e) {
+    var me = mineKey && e.keys.indexOf(mineKey) >= 0 && r.status !== 'checking';
+    if (me) mineShown = true;
+    list.appendChild(distRow(e.name + (me ? ' (you)' : ''), e.w / 100, e.w / max, me, r.tier));
+  });
+  if (!mineShown && r.pct != null && r.status !== 'checking') list.appendChild(distRow(r.name + ' (you)', r.pct, (r.pct * 100) / max, true, r.tier));
+}
+function distRow(name, pct, frac, me, tier) {
+  var li = el('li', me ? 'me t-' + tier : '');
+  var row = el('div', 'row'); row.appendChild(el('span', '', name)); row.appendChild(el('span', 'p', pctLabel(pct)));
+  var bg = el('div', 'bar-bg'); var fg = el('div', 'bar-fg'); fg.style.width = Math.max(2, Math.min(100, Math.round(frac * 100))) + '%';
+  bg.appendChild(fg); li.appendChild(row); li.appendChild(bg); return li;
+}
+function next() {
+  if (S.pending) return;
+  if (S.answers.length >= 7) { renderResults(); show('results'); return; }
+  startPrompt();
+}
+
+/* ---------- Results ---------- */
+function renderResults() {
+  var t = total(), d = depthOf(t);
+  $('resLabel').textContent = S.mode === 'daily' ? 'Final depth · Today’s descent No. ' + S.dayNo : 'Final depth';
+  $('resTotal').textContent = d.toLocaleString('en-US');
+  $('resTitle').textContent = d >= FLOOR ? 'You reached the floor of the Challenger Deep.' : 'Your swarm reached the ' + zoneOf(d) + '.';
+  $('resPoints').textContent = t + ' of 700 points';
+  var sq = $('resSquares'); sq.textContent = '';
+  var labels = [];
+  S.answers.forEach(function (a) { sq.appendChild(el('span', 'sq t-' + a.tier)); labels.push(TIER[a.tier].label.toLowerCase()); });
+  sq.setAttribute('aria-label', 'Rarity of each answer: ' + labels.join(', '));
+  var list = $('resList'); list.textContent = '';
+  S.answers.forEach(function (a, i) {
+    var li = el('li', 't-' + a.tier);
+    li.appendChild(el('span', 'i', String(i + 1)));
+    li.appendChild(el('span', 'dot'));
+    var tx = el('div', 'txt'); tx.appendChild(el('span', 'q', PROMPTS[a.p].text));
+    tx.appendChild(el('span', 'a', a.name || (a.status === 'timeout' ? 'Time expired' : 'Passed')));
+    li.appendChild(tx);
+    li.appendChild(el('span', 'pc', a.status === 'unverified' ? '?' : pctLabel(a.pct)));
+    li.appendChild(el('span', 'pp', '+' + a.pts));
+    list.appendChild(li);
+  });
+  $('resNext').hidden = S.mode !== 'daily';
+  $('copyNote').textContent = ''; $('copyFallback').hidden = true;
+}
+function shareText() {
+  var head = S.mode === 'daily' ? 'KRILLIO No. ' + S.dayNo : 'KRILLIO';
+  return head + ' · ' + fmtM(depthOf(total())) + ' (' + total() + '/700)\n' + S.answers.map(function (a) { return TIER[a.tier].sq; }).join('');
+}
+function copyResult() {
+  var text = shareText(), note = $('copyNote'), fb = $('copyFallback');
+  function fallback() { fb.value = text; fb.hidden = false; fb.focus(); fb.select(); note.textContent = 'Select the text below and copy it.'; }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { note.textContent = 'Result copied to the clipboard.'; }, fallback);
+    } else fallback();
+  } catch (e) { fallback(); }
+}
+
+/* ---------- Countdown ---------- */
+function tickCountdown() {
+  var d = new Date(), mid = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  var s = Math.max(0, Math.floor((mid - d) / 1000));
+  var txt = String(Math.floor(s / 3600)).padStart(2, '0') + ':' + String(Math.floor(s / 60) % 60).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  document.querySelectorAll('.cd').forEach(function (n) { n.textContent = txt; });
+  if (S.screen === 'home' && today().key !== T.key) renderHome();
+}
+
+/* ---------- The swarm ---------- */
+var Sea = (function () {
+  var cv = $('sea'), ctx = cv.getContext('2d');
+  var W = 0, H = 0, dpr = 1, sprites = {}, krill = [], last = 0, running = false;
+  var PXM = 0.5, cam = 0, camTarget = 0, prevCam = 0, snow = [];
+  var reduced = false;
+  var STOPS = [[0, [22, 34, 46]], [150, [15, 24, 34]], [600, [11, 16, 23]], [1500, [8, 11, 16]], [4000, [6, 7, 10]], [11000, [3, 3, 5]]];
+  function waterAt(m) {
+    if (m < 0) return 'rgb(6,7,9)';
+    for (var i = 1; i < STOPS.length; i++) {
+      if (m <= STOPS[i][0]) {
+        var a = STOPS[i - 1], b = STOPS[i], f = (m - a[0]) / (b[0] - a[0]);
+        return 'rgb(' + [0, 1, 2].map(function (j) { return Math.round(a[1][j] + (b[1][j] - a[1][j]) * f); }).join(',') + ')';
+      }
+    }
+    return 'rgb(2,3,7)';
+  }
+  function seedSnow() {
+    snow = [];
+    for (var i = 0; i < 70; i++) snow.push({ x: Math.random() * W, y: Math.random() * H, r: .5 + Math.random() * 1.3, f: .5 + Math.random() * .8, a: .12 + Math.random() * .28 });
+  }
+  function drawOcean(anchorY, t, dt) {
+    var top = cam * PXM - anchorY; // world px (1 m = PXM px) at the top of the screen
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    for (var i = 0; i <= 6; i++) { var y = i / 6 * H; g.addColorStop(i / 6, waterAt((top + y) / PXM)); }
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    var sy = -top;
+    if (sy > -10 && sy < H + 10) {
+      ctx.fillStyle = 'rgb(6,7,9)'; ctx.fillRect(0, 0, W, Math.max(0, sy));
+      ctx.strokeStyle = 'rgba(245,245,247,.4)'; ctx.lineWidth = 1.5; ctx.beginPath();
+      for (var x = 0; x <= W; x += 8) { var wy = sy + Math.sin(x * .03 + t * .0015) * 2.2; if (x) ctx.lineTo(x, wy); else ctx.moveTo(x, wy); }
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(161,161,170,.85)'; ctx.font = '500 12px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText('Surface', W - 16, sy - 9);
+    }
+    // scale ticks every 100 m on the left edge
+    var m0 = Math.max(0, Math.floor(top / PXM / 100) * 100), m1 = (top + H) / PXM;
+    ctx.textAlign = 'left'; ctx.font = '400 10px ui-monospace, Menlo, monospace';
+    for (var m = m0; m <= m1 && m <= FLOOR; m += 100) {
+      var ty = m * PXM - top, major = m % 500 === 0;
+      ctx.strokeStyle = major ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.1)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(major ? 14 : 7, ty); ctx.stroke();
+      if (major && m > 0) { ctx.fillStyle = 'rgba(161,161,170,.6)'; ctx.fillText(m.toLocaleString('en-US') + ' m', 18, ty + 3); }
+    }
+    // named depths
+    ctx.textAlign = 'right';
+    MARKERS.forEach(function (mk) {
+      var my = mk[0] * PXM - top;
+      if (my < -30 || my > H + 30) return;
+      ctx.strokeStyle = mk[1] ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.07)'; ctx.setLineDash(mk[1] ? [] : [3, 5]);
+      ctx.beginPath(); ctx.moveTo(60, my); ctx.lineTo(W, my); ctx.stroke(); ctx.setLineDash([]);
+      if (mk[1]) { ctx.fillStyle = 'rgba(245,245,247,.8)'; ctx.font = '600 12px -apple-system, system-ui, sans-serif'; ctx.fillText(mk[1] + ' · ' + mk[0].toLocaleString('en-US') + ' m', W - 16, my - 20); }
+      ctx.fillStyle = 'rgba(161,161,170,.7)'; ctx.font = '400 11px -apple-system, system-ui, sans-serif'; ctx.fillText(mk[2], W - 16, my - 6);
+    });
+    if (FLOOR * PXM - top < H) { var fy = FLOOR * PXM - top; ctx.fillStyle = 'rgba(24,25,30,.95)'; ctx.fillRect(0, fy, W, H - fy); }
+    // marine snow drifts past as the camera sinks
+    var dy = (cam - prevCam) * PXM; prevCam = cam;
+    ctx.fillStyle = 'rgb(205,208,216)';
+    for (var s = 0; s < snow.length; s++) {
+      var p = snow[s];
+      if (!reduced) { p.y -= dy * p.f + .12 * dt * p.f; p.x += Math.sin(t * .0005 + s) * .05 * dt; }
+      if (p.y < -4) { p.y += H + 8; p.x = Math.random() * W; } else if (p.y > H + 4) { p.y -= H + 8; }
+      ctx.globalAlpha = p.a; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  function resize() {
+    dpr = Math.min(2, window.devicePixelRatio || 1); W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); sprites = {};
+    seedSnow();
+  }
+  function sprite(hex) {
+    if (sprites[hex]) return sprites[hex];
+    var s = document.createElement('canvas'); s.width = 64 * dpr; s.height = 32 * dpr;
+    var c = s.getContext('2d'); c.scale(dpr, dpr);
+    c.lineCap = 'round';
+    // one thin antenna
+    c.strokeStyle = hex; c.globalAlpha = .45; c.lineWidth = .7;
+    c.beginPath(); c.moveTo(40, 14); c.quadraticCurveTo(50, 9, 58, 9); c.stroke();
+    // slim body with a small tail notch
+    c.globalAlpha = .92; c.fillStyle = hex;
+    c.beginPath(); c.moveTo(4, 15); c.quadraticCurveTo(14, 9.5, 30, 10.5); c.quadraticCurveTo(39, 11.5, 40, 14.5);
+    c.quadraticCurveTo(39, 17.5, 30, 18); c.quadraticCurveTo(14, 18.5, 4, 15); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(5, 15); c.lineTo(1, 12.5); c.lineTo(1, 17.5); c.closePath(); c.fill();
+    // eye
+    c.globalAlpha = 1; c.fillStyle = '#0A0B10'; c.beginPath(); c.arc(34.5, 13.4, 1.4, 0, Math.PI * 2); c.fill();
+    sprites[hex] = s; return s;
+  }
+  function stage() {
+    var scr = document.querySelector('.screen:not([hidden])');
+    var st = scr && scr.querySelector('[data-stage]');
+    if (!st) return { x: W / 2, y: H * .6, w: W * .6, h: 120 };
+    var r = st.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+  }
+  function add(hex, n, from, o) {
+    o = o || {};
+    var st = from || stage();
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2, sp = from ? 2 + Math.random() * 3 : 0;
+      krill.push({
+        x: st.x + (from ? 0 : (Math.random() - .5) * 120), y: st.y + (from ? 0 : (Math.random() - .5) * 60),
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, hex: hex, a: o.alpha || 1,
+        s: (o.scale || 1) * (.75 + Math.random() * .5), ph: Math.random() * Math.PI * 2,
+        f1: .7 + Math.random() * .6, f2: .7 + Math.random() * .6, r: .35 + Math.sqrt(Math.random()) * .65, base: !!o.base
+      });
+    }
+  }
+  function frame(t) {
+    if (!running) return;
+    var dt = last ? Math.min(3, (t - last) / 16.67) : 1; last = t;
+    var st = stage(), sx = Math.max(40, st.w * .4), sy = Math.max(18, st.h * .34), tt = reduced ? 0 : t;
+    if (reduced) cam = camTarget; else cam += (camTarget - cam) * (1 - Math.exp(-dt * .045));
+    if (Math.abs(camTarget - cam) < .5) cam = camTarget;
+    ctx.clearRect(0, 0, W, H);
+    drawOcean(st.y - st.h / 2 - 6, t, dt);
+    ctx.globalCompositeOperation = 'source-over';
+    var damp = Math.pow(.965, dt);
+    for (var i = 0; i < krill.length; i++) {
+      var k = krill[i];
+      var tx = st.x + Math.cos(tt * .00042 * k.f1 + k.ph) * sx * k.r;
+      var ty = st.y + Math.sin(tt * .00066 * k.f2 + k.ph * 1.7) * sy * k.r;
+      if (reduced) { k.x = tx; k.y = ty; k.vx = Math.cos(k.ph); k.vy = Math.sin(k.ph) * .3; }
+      else {
+        k.vx = (k.vx + (tx - k.x) * .0016 * dt) * damp; k.vy = (k.vy + (ty - k.y) * .0016 * dt) * damp;
+        var v = Math.hypot(k.vx, k.vy); if (v > 3.4) { k.vx *= 3.4 / v; k.vy *= 3.4 / v; }
+        k.x += k.vx * dt; k.y += k.vy * dt;
+      }
+      ctx.save(); ctx.globalAlpha = k.a; ctx.translate(k.x, k.y); ctx.rotate(Math.atan2(k.vy, k.vx)); ctx.scale(k.s, k.s);
+      ctx.drawImage(sprite(k.hex), -32, -16, 64, 32); ctx.restore();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(frame);
+  }
+  function start() { if (running) return; running = true; last = 0; requestAnimationFrame(frame); }
+  function stop() { running = false; }
+  resize();
+  window.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else start(); });
+  add('#8B8B95', 14, null, { alpha: .55, scale: .8, base: true });
+  start();
+  return {
+    reset: function () { krill = krill.filter(function (k) { return k.base; }); },
+    setDepth: function (m, animate) { camTarget = Math.max(0, Math.min(FLOOR, m)); if (!animate) { cam = camTarget; prevCam = cam; } },
+    addTier: function (tier, from) { var t = TIER[tier]; if (t && t.krill) add(t.hex, t.krill, from, { scale: t.ks }); },
+    count: function () { return krill.length; }
+  };
+})();
+
+/* ---------- Wiring ---------- */
+$('startBtn').addEventListener('click', beginDaily);
+$('practiceBtn').addEventListener('click', beginPractice);
+$('answerForm').addEventListener('submit', function (e) { e.preventDefault(); lockIn(input.value, 'submit'); });
+$('skipBtn').addEventListener('click', function () { lockIn('', 'skip'); });
+$('nextBtn').addEventListener('click', next);
+$('skipCheckBtn').addEventListener('click', function () { if (judgeCtl) judgeCtl.abort(); });
+function goHome(e) { if (e) e.preventDefault(); if (S.pending) return; stopTimer(); busy = false; if (S.mode === 'practice') { S.answers = []; } renderHome(); show('home'); }
+$('quitBtn').addEventListener('click', goHome);
+$('quitBtn2').addEventListener('click', goHome);
+$('homeBtn').addEventListener('click', goHome);
+$('homeBtnTop').addEventListener('click', goHome);
+$('copyBtn').addEventListener('click', copyResult);
+$('againBtn').addEventListener('click', beginPractice);
+
+function boot(data) {
+  renderHome();
+  var saved = load('krillio.daily.' + T.key);
+  if (saved && saved.answers) saved.answers.forEach(function (a) { Sea.addTier(a.tier, null); });
+  var d = data && data.S;
+  if (d && d.answers && d.prompts && !d.pending) {
+    S.mode = d.mode; S.dayNo = d.dayNo; S.dayKey = d.dayKey; S.prompts = d.prompts; S.answers = d.answers;
+    Sea.reset(); S.answers.forEach(function (a) { Sea.addTier(a.tier, null); });
+    if (d.screen !== 'home') Sea.setDepth(depthOf(total()), false);
+    if (d.screen === 'results') { renderResults(); show('results'); }
+    else if (d.screen === 'play' && S.answers.length < 7) startPrompt();
+    else if (d.screen === 'reveal' && S.answers.length) { var last = S.answers[S.answers.length - 1]; show('reveal'); renderReveal(PROMPTS[last.p], last); renderBars(); }
+    else show('home');
+  } else show('home');
+  tickCountdown(); setInterval(tickCountdown, 1000);
+}
+var hot = window.claude && window.claude.hot;
+if (hot && typeof hot.snapshot === 'function') hot.snapshot(function () { return { S: { mode: S.mode, dayNo: S.dayNo, dayKey: S.dayKey, prompts: S.prompts, answers: S.answers, screen: S.screen, pending: S.pending } }; });
+if (hot && typeof hot.ready === 'function') hot.ready(boot); else boot((hot && hot.data) || {});
+window.__krillio = { S: S, PROMPTS: PROMPTS, matchEntry: matchEntry, pointsFor: pointsFor, key: key };
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+</script>
+</body>
+</html>
